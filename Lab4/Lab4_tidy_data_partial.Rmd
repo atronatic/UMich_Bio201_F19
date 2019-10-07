@@ -1,6 +1,6 @@
 ---
 title: 'Lab 4: Tidy data part 2'
-author: "Kristi Gdanetz MacCready"
+author: "Kevin Huang"
 date: "9/30/2019"
 output: html_document
 ---
@@ -140,7 +140,7 @@ Optional arguments include ‘fill’ which, if included, fills in missing value
 
 ```{r}
 scfa_wkly %>%
-  rename_all(tolower)
+  rename_all(tolower)%>%
   spread(study_week, butyrate_mean)
 ```
 
@@ -204,6 +204,8 @@ mean_delta_butyrate <- butyrate_wide%>%
   group_by(Supplement_consumed)%>%
   summarize(mean_delta_butyrate = mean(delta_butyrate))
 
+mean_delta_butyrate
+
 ```
 
 Repeat this process for each SCFA. How would you plot your results? 
@@ -211,8 +213,8 @@ Repeat this process for each SCFA. How would you plot your results?
 # copy+paste and edit code chunk for acetate
 mean_delta_acetate <- acetate_wide%>%
   group_by(Supplement_consumed)%>%
-  summarize(mean_acetate_butyrate = mean(delta_acetate))
-
+  summarize(mean_delta_acetate = mean(delta_acetate))
+mean_delta_acetate
 ```
 
 ```{r}
@@ -220,11 +222,25 @@ mean_delta_acetate <- acetate_wide%>%
 mean_delta_propionate <- propionate_wide%>%
   group_by(Supplement_consumed)%>%
   summarize(mean_delta_propionate = mean(delta_propionate))
-
+mean_delta_propionate
 ```
 
 ```{r}
 # copy+paste and edit code chunks for plots
+ggplot(data = mean_delta_acetate,
+       mapping = aes(x = Supplement_consumed,
+                     y = mean_delta_acetate)) +
+    geom_col()
+
+ggplot(data = mean_delta_butyrate,
+       mapping = aes(x = Supplement_consumed,
+                     y = mean_delta_butyrate)) +
+    geom_col()
+
+ggplot(data = mean_delta_propionate,
+       mapping = aes(x = Supplement_consumed,
+                     y = mean_delta_propionate)) +
+    geom_col()
 ```
 
 These plots are fine, however they could be graphed more efficiently with facets. This introduces a new problem: combining data frames.
@@ -277,11 +293,11 @@ acetate_wide <- acetate_wide %>%
 
 # execute join
 join2 <- full_join(acetate_wide, butyrate_wide,
-                    by = c("participant_id", "semester", "supplement_consumed"))
+                    by = c("Participant_ID", "Semester", "Supplement_consumed"))
 
 # check results 
 nrow(join2)
-n_distinct(join2$participant_id)
+n_distinct(join2$Participant_ID)
 colnames(join2)
 ```
 
@@ -295,13 +311,13 @@ propionate_wide <- propionate_wide %>%
 
 # execute join
 join3 <- inner_join(acetate_wide, butyrate_wide,
-                   by = c("participant_id", "semester", "supplement_consumed")) %>%
+                   by = c("Participant_ID", "Semester", "Supplement_consumed")) %>%
   full_join(propionate_wide, 
-            by = c("participant_id", "semester", "supplement_consumed"))
+            by = c("Participant_ID", "Semester", "Supplement_consumed"))
 
 # check results 
 nrow(join3)
-n_distinct(join3$participant_id)
+n_distinct(join3$Participant_ID)
 colnames(join3)
 ```
 
@@ -310,11 +326,39 @@ colnames(join3)
 Part 1: Join and update the column names of the three SCFA wide data frames, calculate the weekly total SCFA for each participant, calculate the difference in total SCFA across weeks.
 ```{r}
 # write code here
+propionate_wide <- propionate_wide %>%
+  rename(week1 = pro_wk1,
+         week3 = pro_wk3)
+acetate_wide <- acetate_wide %>%
+  rename(week1 = ace_wk1,
+         week3 = ace_wk3)
+butyrate_wide <- butyrate_wide %>%
+  rename(week1 = but_wk1,
+         week3 = but_wk3)
+
+
+join4 <- inner_join(acetate_wide, butyrate_wide,
+                    by = c("Participant_ID", "week1", "week3"))%>%
+    full_join(propionate_wide,
+              by = c("Participant_ID", "week1", "week3"))%>%
+  mutate(delta_total_SCFA = week3 - week1)
 ```
 
 Part 2: Plot the change in total SCFA for each semester, faceting for each supplement consumed. Clean up the axes and labels. Extra challenge: Can you use pipes to execute Parts 1 and 2 as one long command?
 ```{r}
 # write code here
+plot_delta_total_SCFA <- join4 %>%
+  ggplot(aes(x = Participant_ID,
+             y = delta_total_SCFA,
+             Semester, Supplement_consumed)) +
+  geom_point(aes(color = Semester)) +
+  facet_grid(~Supplement_consumed)+
+  labs(x = "Individuals",
+       y = "Change in total SCFA (mmol/kg)") +
+  theme(axis.text.x = element_blank(),
+        legend.position = "none")
+
+plot_delta_total_SCFA
 ```
 
 
@@ -332,19 +376,19 @@ gather() takes four principal arguments:
 In this situation we are gathering the multiple columns and turning them into a pair of new variables. One variable represents the column names as values, and the other variable contains the values/measurements previously found under each column name.
 
 ```{r}
-total_scfas %>%
+join4 %>%
   select(-ends_with("_wk1"), -ends_with("_wk3")) %>%
   rename(acetate = delta_acetate,
          butyrate = delta_butyrate, 
          propionate = delta_propionate, 
-         total = delta_total) %>% 
+         total = delta_total_SCFA) %>% 
   gather(key = SCFA, value = wkly_diff,
          acetate, butyrate, propionate, total)
 ```
 
 Let's repeat this for indivual week measurements, instead of the difference. 
 ```{r}
-total_scfas %>%
+join4 %>%
   select(-starts_with("delta_")) %>%
   gather(key = SCFA_wk, value = SCFA_concentration,
          ace_wk1, ace_wk3, but_wk1, but_wk3, pro_wk1, pro_wk3, total_wk1, total_wk3)
@@ -353,7 +397,7 @@ total_scfas %>%
 Notice that the variable in the SCFA_wk indicate the SCFA and the study week, we want these information as separate columns. Remember it took us multiple steps to generate the wide data frame, so it will require multiple steps, to recreate the long data frame with the transformed data. 
 ```{r}
 # acetate long
-ace_long <- total_scfas %>%
+ace_long <- join4 %>%
   #drop diff columns & extra SCFAs
   select(-starts_with("delta_"), -starts_with("but_"), -starts_with("pro_"), -starts_with("total")) %>% 
   rename(week1 = ace_wk1,
@@ -363,19 +407,29 @@ ace_long <- total_scfas %>%
 
 ```{r}
 # copy+paste and edit code here to create but_long
-but_long <-
+but_long <-join4 %>%
+  #drop diff columns & extra SCFAs
+  select(-starts_with("delta_"), -starts_with("but_"), -starts_with("pro_"), -starts_with("total")) %>% 
+  rename(week1 = but_wk1,
+         week3 = but_wk3) %>% #convert weeks to consistent format for join
+  gather(key = study_week, value = butyrate, week1, week3)
   
 ```
 
 ```{r}
 # copy+paste and edit code here to create pro_long
-pro_long <- 
+pro_long <- join4 %>%
+  #drop diff columns & extra SCFAs
+  select(-starts_with("delta_"), -starts_with("but_"), -starts_with("pro_"), -starts_with("total")) %>% 
+  rename(week1 = pro_wk1,
+         week3 = pro_wk3) %>% #convert weeks to consistent format for join
+  gather(key = study_week, value = propionate, week1, week3)
   
 ```
 
 Check the dimensions of the three long data frames you just created, select the appropriate type of join, and create a new data frame called scfa_long. 
 ```{r}
-scfa_long <- 
+scfa_long <- full_join()
 ```
 
 Remember we want one column for study week and one column for the SCFA measurements, so we need to use gather() one more time.
