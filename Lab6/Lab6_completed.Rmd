@@ -27,8 +27,8 @@ set.seed(7)
 Import the SCFA data frame from last week. Update the columns names to match the course's style, set the order of the semesters by converting from character to factor. 
 
 ```{r include=FALSE}
-scfa_long <- read_delim("~/UMich_Bio201_F19/Lab5/curated_data/SCFA_wkly_long.txt", 
-    "\t", escape_double = FALSE, trim_ws = TRUE)%>%
+scfa_long <- SCFA_wkly_long <- read_delim("C:/Users/moonl/Desktop/UMich_Bio201_F19/Lab5/curated_data/SCFA_wkly_long.txt", 
+    "\t", escape_double = FALSE, trim_ws = TRUE) %>%
   rename_all(tolower) %>%
   select(-ends_with("median")) %>% 
   mutate(totalscfa_mean = acetate_mean + butyrate_mean + propionate_mean,
@@ -88,7 +88,7 @@ taxa_cat_curated[["semester"]] <- recode(.x=taxa_cat_curated[["semester"]],
                                   "2019w"="Winter2019")
 
 # Save a copy of the curated data frame
-write_delim(taxa_cat_curated, path="curated_data/taxa_cat_curated.csv",
+write_delim(taxa_cat_curated, path="C:/users/moonl/Desktop/UMich_Bio201_F19/Lab6/curated_data/taxa_cat_curated.csv",
             delim = ",", quote = FALSE, col_names = TRUE)
 
 View(taxa_cat_curated)
@@ -122,8 +122,8 @@ colnames(scfa_long)
 ```
 
 ```{r}
-tax_scfa <- full_join(scfa_long, taxa_cat_curated,
-                 by = c("participant_id", "study_week", "semester"))
+tax_scfa <- inner_join(scfa_long, taxa_cat_curated,
+                 by = c())
 ```
 
 # Intro
@@ -138,14 +138,17 @@ Remember the assumptions for an ANOVA are similar to a t-test (large-ish sample 
 
 ```{r eval=FALSE, include=FALSE}
 # sample size of each group
-group_by() %>% summarize(sample_size = n())
+group_by(tax_scfa) %>% summarize(sample_size = n())
 
 # check normality of each group
-shaprio.test()
-histogram()
+shapiro.test(tax_scfa$totalscfa_mean)
+histogram(tax_scfa$totalscfa_mean)
+
+shapiro.test(tax_scfa$relative_abundance)
+histogram(tax_scfa$relative_abundance)
 
 # check variances
-bartlett.test()
+bartlett.test(relative_abundance ~ totalscfa_mean, data = tax_scfa)
 ```
 
 Last week each ANOVA you conducted should have resulted in a non-significant result (approx p >= 0.15). Run the code for the plot and ANOVA below. 
@@ -178,7 +181,7 @@ tuk_wk1 <- tidy(TukeyHSD(aov_wk1)) %>%
   filter(adj.p.value <= 0.10) #filter Tukey output for significant results 
 
 # save data frame of results to file 
-write_delim(tuk_wk1, path = "~/Desktop/UMich_Bio201_F19/Lab6/curated_data/tuk_wk1.txt",
+write_delim(tuk_wk1, path = "C:/users/moonl/Desktop/UMich_Bio201_F19/Lab6/curated_data/tuk_wk1.txt",
             delim = "\t", col_names = TRUE, quote = FALSE)
 ```
 
@@ -190,7 +193,7 @@ Last week you should have checked assumptions on breath methane and determined t
 
 ```{r}
 # import methane data 
-breath_wkly <- read_delim("~/UMich_Bio201_F19/Lab5/curated_data/breath_wkly.txt", 
+breath_wkly <- read_delim("C:/Users/moonl/Desktop/UMich_Bio201_F19/Lab5/curated_data/breath_wkly.txt", 
     "\t", escape_double = FALSE, trim_ws = TRUE) %>%
 # format methane data
   rename_all(tolower) %>%
@@ -225,24 +228,41 @@ The interpretation for Kruskall-Wallace is similar to an ANOVA; small p-value in
 * Write hypotheses to answer the question; do hydrogen breath levels differ between participants consuming fiber supplements? Create a plot of hydrogen levels:
 ```{r}
 # hypothesis: 
-# I believe that hydrogen breath levels do differ between participants consuming fiber supplements
+
+#I believe that hydrogen breath levels do differ between participants consuming fiber supplements. 
+
 # plot 
-breath_wkly 
+breath_wkly %>%
+  ggplot(aes(x = supplement_consumed, y = h2_mean, color = supplement_consumed)) + 
+  geom_violin() + 
+  geom_jitter()+
+  xlab("Supplement Consumed") + ylab("Mean Hydrogen") +
+  theme(legend.position = "none")
 ```
 
 * Which assumptions need checked for the statistical test(s)? Check the assumptions in the space below:
 ```{r}
+# normality
+shapiro.test(breath_wkly$h2_mean)
 
+# sample size
+group_by(breath_wkly) %>%
+  summarize(sample_size = n())
+
+# variance
+bartlett.test(h2_mean ~ supplement_consumed, data = breath_wkly)
 ```
 
 * Which statistical test(s) would you use to answer the question? Conduct the appropriate statistical test(s):
 ```{r}
-
+# use wilcoxon test to answer the question
+kruskal.test(supplement_consumed ~ h2_mean, breath_wkly)
 ```
 
 * What is the answer to the question? Write your conclusions:
 ```{r}
 # conclusion 
+# as the p-value is greater than 0.05, the null hypothesis is accepted in that there is no difference between the amount of hydrogen produced by the different supplements. 
 ```
 
 # Correlations
@@ -292,25 +312,32 @@ Use the `tax_scfa` data frame, calculate the ratio of each SCFA in a new column 
 
 ```{r}
 scfa_ratio <- tax_scfa %>%
-  mutate(acetate_ratio) %>% 
-  mutate(butyrate_ratio) %>% 
-  mutate(propionate_ratio) %>%
-  mutate(ratio_check)
+  mutate(acetate_ratio = acetate_mean/totalscfa_mean) %>% 
+  mutate(butyrate_ratio = butyrate_mean/totalscfa_mean) %>% 
+  mutate(propionate_ratio = propionate_mean/totalscfa_mean) %>%
+  mutate(ratio_check = (acetate_ratio + butyrate_ratio + propionate_ratio))
 ```
 
 Calculate the ratios of Firmicutes to Bacteroidetes (Firmicutes abund / Bacteroidetes abundance).
 
 ```{r}
 # filter for Firmicutes, calculate sum per person per week (firmicutes_abund)
-Fr <- scfa_ratio 
+Fr <- scfa_ratio %>%
+  group_by(participant_id, study_week, frequency, 
+semester, supplement_consumed, quantity_compliant) %>%
+  filter(phylum == "Firmicutes") %>%
+  summarize(firmicutes_abundance = sum(relative_abundance))
 
 # filter for Bacteroidetes, calculate sum per person per week (bacteroidetes_abund)
-Br <- scfa_ratio 
+Br <- scfa_ratio %>%
+   group_by(participant_id, study_week, frequency,  semester, supplement_consumed, quantity_compliant) %>%
+  filter(phylum == "Bacteroidetes") %>%
+  summarize(bacteroidetes_abundance = sum(relative_abundance))
 
 # join subsetted data frames
-tax_ratio <- join(Fr, Br) %>%
-  mutate(f_b_ratio = (firmicutes_abund / bacteroidetes_abund)) %>% #calculate ratios
-  join() #join with scfa_ratio data frame
+tax_ratio <- full_join(Fr, Br, by = c("participant_id", "study_week", "frequency", "semester", "supplement_consumed", "quantity_compliant")) %>%
+  mutate(f_b_ratio = (firmicutes_abundance / bacteroidetes_abundance)) %>% #calculate ratios
+  full_join(scfa_ratio, by = c("participant_id", "study_week", "frequency", "semester", "supplement_consumed", "quantity_compliant")) #join with scfa_ratio data frame
 ```
 
 ### Homework 6.3
@@ -318,13 +345,16 @@ Determine if there is a relationship between the butyrate concentration and Firm
 ```{r}
 # plot
 tax_ratio %>%
-  ggplot()
+  ggplot(aes(x = butyrate_ratio, y = firmicutes_abundance)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE) + 
+  xlab("Butyrate Ratio") +
+  ylab("Firmicutes Abundance")
 
-save_plot()
+save_plot(filename = "figures/tax_ratio.pdf")
 
 # correlation test 
 m63a <- tax_ratio %>%
-  lm()
+  lm(butyrate_ratio ~ firmicutes_abundance, data=.)
 
 summary(m63a) #view results 
 ```
@@ -333,13 +363,14 @@ Do you draw the same conclusions if you use the butyrate ratio and Firmicutes to
 ```{r}
 # plot
 tax_ratio %>%
-  ggplot()
-
-save_plot()
+  ggplot(aes(x = butyrate_ratio, y = f_b_ratio)) + 
+  geom_point() + geom_smooth(method = "lm", se = FALSE) + 
+  xlab("Butyrate Ratio") +
+  ylab("Firmicutes to Bacteroidetes Ratio")
 
 # correlation test 
 m63b <- tax_ratio %>%
-  lm()
+  lm(butyrate_ratio ~ f_b_ratio, data=.)
 
 summary(m63b) #view results 
 ```
@@ -347,12 +378,23 @@ summary(m63b) #view results
 ### Homework 6.4
 Determine if there is a relationship between the propionate concentration and Bacteroidetes abundance. Conduct the statistical test and generate a plot. Save the plot.
 ```{r}
+tax_ratio %>%
+  filter(phylum == "Bacteroidetes <phylum>", study_week == "week3", #subset for week3
+         supplement_consumed == "BRMPS" | supplement_consumed == "LOODAT") %>%
+  ggplot(aes(x = propionate_ratio, y = bacteroidetes_abundance)) + geom_point() +
+  geom_smooth(method = "lm", se = FALSE) + 
+  xlab("Propionate Ratio")+
+  ylab("Bacteroidetes Abundance")
 
+m64 <- tax_ratio %>%
+  filter(phylum == "Bacteroidetes <phylum>") %>%
+  lm(propionate_ratio ~ bacteroidetes_abundance, data=.)
+summary(m64)
 ```
 
 Do you draw the same conclusions if you use the propionate ratio and Firmicutes to Bacteroidetes ratio?
 ```{r}
-
+# For some reason my plots/tests are not showing up so I am unable to answer this question unfortunately.
 ```
 
 ### Homework 6.5
@@ -361,6 +403,8 @@ Import the curated pH+BSS data you generated during Lab4. Join the pH data frame
 # import 
 pH_BSS_wkly <- read_delim()
 
+# I was never able to generate the pH+BSS dataframe from Lab4. Thus I don't have it/can't use it, including for HW 6.6 and 6.7
+
 # join 
 tax_scfa_pH <- join(tax_ratio, pH_BSS_wkly) %>%
   na.omit(semester)
@@ -368,24 +412,48 @@ tax_scfa_pH <- join(tax_ratio, pH_BSS_wkly) %>%
 
 Determine if there is a relationship between total SCFAs and acetate. Conduct the statistical test and generate a plot. Save the plot to figures folder.
 ```{r}
+tax_ratio %>%
+  ggplot(aes(x = acetate_mean,
+             y = totalscfa_mean)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", 
+              se = FALSE) +  
+  xlab("Mean Acetate") + 
+  ylab("Total SCFA") 
+
+m65 <- tax_ratio %>%
+  lm(acetate_mean ~ totalscfa_mean, data = .) 
+summary(m65) 
+
 
 ```
 
 Do you draw the same conclusions if you use the total SCFAs and acetate ratio?
 ```{r}
+tax_ratio %>%
+  ggplot(aes(x = acetate_ratio,
+             y = totalscfa_mean)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", 
+              se = FALSE) +  
+  xlab("Acetate Ratio") + 
+  ylab("Total SCFA") 
 
+m65b <- tax_ratio %>%
+  lm(acetate_ratio ~ totalscfa_mean, data = .) 
+summary(m65) 
 ```
 
 ### Homework 6.6
 Determine if there is a relationship between total SCFAs and pH. Conduct the statistical test and generate a plot. Save the plot.
 ```{r}
-
+ # See HW 6.5
 ```
 
 ### Homework 6.7
 Determine if there is a relationship between butyrate and pH. Conduct the statistical test and generate a plot. Save the plot.
 ```{r}
-
+# See HW 6.5
 ```
 
 ### Homework 6.8
@@ -397,8 +465,16 @@ Save each data frame generated today:
 * tax_scfa_pH
 
 ```{r}
-write_delim(your_data_frame, 
-            path="Lab6/curated_data/your_data_frame.txt",
+write_delim(taxa_cat_curated, 
+            path="C:/Users/moonl/Desktop/UMich_Bio201_F19/Lab6/curated_data/taxa_cat_curated.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+
+write_delim(scfa_ratio, 
+            path="C:/Users/moonl/Desktop/UMich_Bio201_F19/Lab6/curated_data/scfa_ratio.txt",
+            delim = "\t", quote = FALSE, col_names = TRUE)
+
+write_delim(tax_scfa, 
+            path="C:/Users/moonl/Desktop/UMich_Bio201_F19/Lab6/curated_data/taxa_scfa.txt",
             delim = "\t", quote = FALSE, col_names = TRUE)
 ```
 
