@@ -7,7 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "~/Documents/UMich_Bio201_F19/")
+knitr::opts_knit$set(root.dir = "~/Desktop/UMich_Bio201_F19/")
 ```
 
 As with each lab, add "completed" to the Rmd filename; update the name in the author line above; update the location of the working directory as necessary. 
@@ -63,7 +63,7 @@ butyrate_df %>%
 # Result3 = new_column contains the median of each participant 
 ```
 
-For Result1, the result is true. The code will filter only for the data from where the Semester is equal to "Fall2019". For Result2, the result is false. (Avg_butyrate <= 47.0) returns values that are greater than or equal to 47.0, not only 47.0. For Result3, the result is false. New_column will contain the median for each semester, not participant. 
+For Result1, the result is true. The code will filter only for the data from where the Semester is equal to "Fall2019". For Result2, the result is false. (Avg_butyrate <= 47.0) returns values that are less than or equal to 47.0, not only 47.0. For Result3, the result is false. New_column will contain the median for each semester, not participant. 
 
 ### Question 5
 
